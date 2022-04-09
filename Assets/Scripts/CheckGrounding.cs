@@ -36,7 +36,7 @@ public class CheckGrounding : MonoBehaviour
         }
     }
 
-    void Update()
+    void FixedUpdate()
     {
 
         groundingCheck = false;
@@ -69,22 +69,23 @@ public class CheckGrounding : MonoBehaviour
 
         }
     }
-
+    Vector3 rayDirection;
+    Vector3 rayOrigin;
     private void RayCastingGrounding()
     {
-        Vector3 direction = Vector3.down;
-        if (castInLocalSpace) direction = transform.TransformDirection(Vector3.down);
+        rayDirection = Vector3.down;
+        if (castInLocalSpace) rayDirection = transform.TransformDirection(Vector3.down);
 
         for (int i = 0; i < castsInitPos.Count; i++)
         {
-            Vector3 Origin = transform.TransformDirection(castsInitPos[i]) + transform.position;
-            if (Physics.Raycast(Origin, direction, raySize, ~collisionLayers))
+            rayOrigin = transform.TransformDirection(castsInitPos[i]) + transform.position;
+            if (Physics.Raycast(rayOrigin, rayDirection, raySize, ~collisionLayers))
             {
                 groundingCheck = true;
-                if (showDebugRay) Debug.DrawRay(Origin, direction * raySize, Color.blue);
+                if (showDebugRay) Debug.DrawRay(rayOrigin, rayDirection * raySize, Color.blue);
             }
             else
-                if (showDebugRay) Debug.DrawRay(Origin, direction * raySize, Color.yellow);
+                if (showDebugRay) Debug.DrawRay(rayOrigin, rayDirection * raySize, Color.yellow);
         }
     }
 

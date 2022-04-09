@@ -15,7 +15,7 @@ public class GetFloorNormal : MonoBehaviour
     [SerializeField] List<Vector2> castsInitPos = new List<Vector2>();
     [SerializeField] float yOffset;
     [SerializeField] float size;
-    [SerializeField] LayerMask layersIgnored;
+    public LayerMask layersIgnored;
     [Header("Averaging Over Time")]
     [SerializeField] bool getAverageOverTime = true;
     [Range(1,100)][SerializeField] int sampleSize = 5;
@@ -29,6 +29,7 @@ public class GetFloorNormal : MonoBehaviour
 
     List<Vector3> frameNormals = new List<Vector3>();
     Vector3[] allNormals;
+    Vector3 origin;
     private int normalIndex;
 
     private void Start()
@@ -48,12 +49,13 @@ public class GetFloorNormal : MonoBehaviour
     }
 
     void Update()
-    {
+    {        
         GetFrameNormal();
-
         Normal = getAverageOverTime ? NormalTimeAveraged : FrameNormal;
     }
 
+    Vector3 rayDirection;
+    RaycastHit hit;
     private void GetFrameNormal()
     {
         for (int i = 0; i < frameNormals.Count; i++)
@@ -62,18 +64,17 @@ public class GetFloorNormal : MonoBehaviour
         }
 
         AllRaysHit = true;
-        Vector3 direction = Vector3.down;
-        if (CastInLocalSpace) direction = transform.TransformDirection(Vector3.down);
+        rayDirection = Vector3.down;
+        if (CastInLocalSpace) rayDirection = transform.TransformDirection(Vector3.down);
         for (int i = 0; i < castsInitPos.Count; ++i)
         {
-            RaycastHit hit;
-            Vector3 Origin = transform.TransformDirection(new Vector3(castsInitPos[i].x, yOffset, castsInitPos[i].y)) + transform.position;
-            if (Physics.Raycast(Origin, direction, out hit, size, ~layersIgnored))
+            origin = transform.TransformDirection(new Vector3(castsInitPos[i].x, yOffset, castsInitPos[i].y)) + transform.position;                        
+            if (Physics.Raycast(origin, rayDirection, out hit, size, ~layersIgnored))
                 frameNormals[i] = hit.normal;
             else
                 AllRaysHit = false;
 
-            if (showDebugRays) Debug.DrawRay(Origin, direction * size, Color.red);
+            if (showDebugRays) Debug.DrawRay(origin, rayDirection * size, Color.red);
         }
 
         FrameNormalSum = Vector3.zero;
@@ -87,13 +88,14 @@ public class GetFloorNormal : MonoBehaviour
         if (showDebugRays) Debug.DrawRay(originDebugNormal + transform.position, Normal, Color.green);
     }
 
+    Vector3 normalsSum;
     IEnumerator GetAverageOverTime()
     {
         while(getAverageOverTime)
         {
             if (normalIndex >= allNormals.Length) normalIndex = 0;
 
-            Vector3 normalsSum = directionWhenNotAllHit;
+            normalsSum = directionWhenNotAllHit;
 
             if (!AllRaysHit && useDefaultIfNotAllHit)
                 allNormals[normalIndex] = directionWhenNotAllHit;
