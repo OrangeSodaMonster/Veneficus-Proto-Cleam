@@ -13,6 +13,7 @@ public struct RacerInputs
     public bool jump1Holding;
     public bool jump2Triggered;
     public bool jump2Holding;
+    public bool superJumpTriggered;
 
     public bool basicProjectile;
     public bool shield;
@@ -29,9 +30,8 @@ public class RacerInput : MonoBehaviour
     bool untriggerJump1;
     bool untriggerJump2;
 
-    private void Awake()
-    {
-    }
+    bool jump1Started;
+    bool jump2Started;
 
     public void Move(InputAction.CallbackContext context)
     {
@@ -40,7 +40,11 @@ public class RacerInput : MonoBehaviour
 
     public void Jump1(InputAction.CallbackContext context)
     {
-        if (context.performed)
+        if (context.started)
+        {
+            jump1Started = true;            
+        }
+        if (context.performed && !jump2Started)
         {
             inputs.jump1Triggered = true;
             inputs.jump1Holding = true;
@@ -48,12 +52,17 @@ public class RacerInput : MonoBehaviour
         if (context.canceled)
         {
             inputs.jump1Holding = false;
+            jump1Started = false;
         }
     }
 
     public void Jump2(InputAction.CallbackContext context)
     {
-        if (context.performed)
+        if (context.started)
+        {
+            jump2Started = true;
+        }
+        if (context.performed && !jump1Started)
         {
             inputs.jump2Triggered = true;
             inputs.jump2Holding = true;
@@ -61,6 +70,7 @@ public class RacerInput : MonoBehaviour
         if (context.canceled)
         {
             inputs.jump2Holding = false;
+            jump2Started = false;
         }
     }
 
@@ -82,6 +92,12 @@ public class RacerInput : MonoBehaviour
         CleanTriggered(ref inputs.jump2Triggered, ref untriggerJump2);
 
         racerController.GetInputs(inputs);
+
+        if(jump1Started && jump2Started)
+        {
+            inputs.superJumpTriggered = true;
+        }
+        else inputs.superJumpTriggered = false;
     }
 
     private void CleanTriggered(ref bool triggered, ref bool untrigger)

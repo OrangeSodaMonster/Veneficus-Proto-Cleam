@@ -8,8 +8,8 @@ public class RacerController : MonoBehaviour
 {
     [Header("Default Values")]
     [SerializeField] float maxSpeed =  65f;
-    [SerializeField] float turningSpeed = 90f;
     [SerializeField] float acceleration = 15f;
+    [SerializeField] float turningSpeed = 90f;
     [SerializeField] AnimationCurve dragingCurve;
     [SerializeField] float groundDeceleration = 30f;
     [SerializeField] float airDeceleration = 15f;
@@ -17,14 +17,15 @@ public class RacerController : MonoBehaviour
     [SerializeField] float maxReverseSpeed = 20f;
     [SerializeField] float alignSpeed = 20f;
     [SerializeField] float jumpSpeed = 11f;
+    [SerializeField] float superJumpSpeed = 20f;
     [SerializeField] float maxFallSpeed = 55f;
     [SerializeField] float gravity = 50f;
 
-    [Header("Stiking Down Force")]
-    [SerializeField] float stickingPower = 100;
-    [SerializeField] float stickingMaxDistance = .1f;
-    [SerializeField] AnimationCurve StickingCurve;
-    public bool isSticking = true;
+    [Header("Drifting Values")]
+    [SerializeField] float driftingMaxSpeed = 72f;
+    [SerializeField] float driftingAcceleration = 17f;
+    [SerializeField] float driftingTurningSpeed = 60f;
+    [SerializeField] ParticleSystem particles;
 
     [Header("Braking and trusting Values")]
     [SerializeField] float brakingTrustingDeceleration = 30f;
@@ -34,6 +35,12 @@ public class RacerController : MonoBehaviour
     [SerializeField] float brakingDeceleration = 60f;
     [SerializeField] float brakingTurningSpeed = 160f;
 
+    [Header("Stiking Down Force")]
+    [SerializeField] float stickingPower = 100;
+    [SerializeField] float stickingMaxDistance = .1f;
+    [SerializeField] AnimationCurve StickingCurve;
+    public bool isSticking = true;
+
     [Header("Debug UI")]
     [SerializeField] GameObject debugCanvas;
     [SerializeField] bool showDebugCanvas;
@@ -41,6 +48,7 @@ public class RacerController : MonoBehaviour
     [SerializeField] TextMeshProUGUI isGroundedText;
     [SerializeField] TextMeshProUGUI ySpeedText;
     [SerializeField] TextMeshProUGUI groundNormalText;
+    [SerializeField] TextMeshProUGUI isDriftingText;
 
     Rigidbody rb;    
     CheckGrounding checkGrounding;
@@ -48,7 +56,12 @@ public class RacerController : MonoBehaviour
 
     bool hasLanded;
     bool hasUngrounded;
+    bool isDrifting;
+    bool ableToDrift1;
+    bool ableToDrift2;
     float currentSpeed;
+    float currentAcceleration;
+    float currentMaxSpeed;
     float currentTurningSpeed;
 
     Quaternion targetRotation;
@@ -57,7 +70,11 @@ public class RacerController : MonoBehaviour
     Vector2 directionInput;
     bool braking;
     bool jump1Requested;
+    bool jump1Holding;
     bool jump2Requested;
+    bool jump2Holding;
+    bool superJumpRequested;
+    bool driftingBoostRequested;
 
     private void Awake()
     {
@@ -76,7 +93,11 @@ public class RacerController : MonoBehaviour
 
         currentSpeed = Vector3.Dot(rb.velocity, transform.forward);
         speedProportion = currentSpeed/maxSpeed;
-        currentTurningSpeed = turningSpeed;       
+        currentMaxSpeed = maxSpeed;
+        currentAcceleration = acceleration;
+        currentTurningSpeed = turningSpeed;
+
+        HandleDrifting();
 
         // On ground
         if (checkGrounding.isGrounded)
@@ -103,14 +124,41 @@ public class RacerController : MonoBehaviour
         HandleRotation(); // must be called after handle braking
     }
 
+    private void HandleDrifting()
+    {        
+        if ((jump1Holding || jump2Holding) && directionInput.y > 0.9f && !braking && !hasUngrounded)
+        {
+            if (Mathf.Abs(directionInput.x) > 0.9f && hasLanded && (jump1Holding && ableToDrift1 || jump2Holding && ableToDrift2))
+            {
+                isDrifting = true;
+                ableToDrift1 = false;
+                ableToDrift2 = false;
+            }
+        }
+        else
+            isDrifting = false;
 
+
+        var partEmission = particles.emission;
+        if (isDrifting)
+        {            
+            partEmission.enabled = true;
+            currentAcceleration = driftingAcceleration;
+            currentMaxSpeed = driftingMaxSpeed;
+            currentTurningSpeed = driftingTurningSpeed;
+        }
+        else
+        {
+            partEmission.enabled = false;
+        }        
+    }
 
     void ApplyDeceleration()
     {
         if (checkGrounding.isGrounded)
         {
             // Ground Deaceleration
-            if (Mathf.Abs(directionInput.y) <= float.Epsilon)
+            if (Mathf.Abs(directionInput.y) <= float.Epsilon && !braking)
                 DecelereteInDirection(groundDeceleration, transform.forward, 0);
             // Decelerate in X on ground
             DecelereteInDirection(xDeceleration, transform.right, 0);
@@ -148,17 +196,36 @@ public class RacerController : MonoBehaviour
     private void HandleJumping()
     {
         //Jump
-        if (jump1Requested)
+        if (superJumpRequested)
+        {
+            isSticking = false;
+            rb.AddForce(superJumpSpeed * Vector3.up, ForceMode.VelocityChange);
+            superJumpRequested = false;
+        }
+        else if (jump1Requested)
         {
             isSticking = false;
             rb.AddForce(jumpSpeed * Vector3.up, ForceMode.VelocityChange);
             jump1Requested = false;
+            ableToDrift1 = true;
         }
+        else if (jump2Requested)
+        {
+            isSticking = false;
+            rb.AddForce(jumpSpeed * Vector3.up, ForceMode.VelocityChange);
+            jump2Requested = false;
+            ableToDrift2 = true;
+        }
+
     }
 
+    bool directionBrake;
     private void HandleBraking()
     {
-        if (!braking) return;
+        if (Math.Sign(currentSpeed) != directionInput.y && Mathf.Abs(directionInput.y) >= float.Epsilon) directionBrake = true;
+        else directionBrake = false;
+
+        if (!braking && !directionBrake) return;
         // Braking Trusting
         if (Mathf.Abs(directionInput.y) >= float.Epsilon)
         {
@@ -180,9 +247,9 @@ public class RacerController : MonoBehaviour
     {
         propulsion = 0;
         if (Mathf.Sign(directionInput.y) > 0)
-            propulsion = directionInput.y * acceleration * dragingCurve.Evaluate(1 - currentSpeed/maxSpeed);
+            propulsion = directionInput.y * currentAcceleration * dragingCurve.Evaluate(1 - currentSpeed/currentMaxSpeed);
         else if (Mathf.Sign(directionInput.y) < 0)
-            propulsion = directionInput.y * acceleration * dragingCurve.Evaluate(1 - currentSpeed/-Mathf.Abs(maxReverseSpeed));
+            propulsion = directionInput.y * currentAcceleration * dragingCurve.Evaluate(1 - currentSpeed/-Mathf.Abs(maxReverseSpeed));
         if (!braking) rb.AddForce(propulsion * transform.forward, ForceMode.Acceleration);
     }
 
@@ -211,16 +278,20 @@ public class RacerController : MonoBehaviour
         }
     }
 
+    float speedBeforeDecelerating;
+    //float speedAfterDecelerating;
     void DecelereteInDirection(float ratePerSec, Vector3 direction, float minValue)
     {
-        float currentValue = Vector3.Dot(rb.velocity, direction);
-        if (currentValue == 0) return;
-        float newValue = currentValue - ratePerSec * Time.fixedDeltaTime * Mathf.Sign(currentValue);
-        if (newValue < minValue && Mathf.Sign(currentValue) > 0 || newValue > minValue && Mathf.Sign(currentValue) < 0)
-            rb.AddForce(-currentValue * direction, ForceMode.VelocityChange);
+        speedBeforeDecelerating = Vector3.Dot(rb.velocity, direction);
+        if (speedBeforeDecelerating == 0) return;
+        //speedAfterDecelerating = speedBeforeDecelerating - ratePerSec * Time.fixedDeltaTime * Mathf.Sign(speedBeforeDecelerating);
+
+        //if (speedAfterDecelerating < minValue && Mathf.Sign(speedBeforeDecelerating) > 0 || speedAfterDecelerating > minValue && Mathf.Sign(speedBeforeDecelerating) < 0)
+        if (Mathf.Abs(speedBeforeDecelerating) <= ratePerSec * Time.fixedDeltaTime)
+            rb.AddForce(-speedBeforeDecelerating * direction, ForceMode.VelocityChange);
         else
-            rb.AddForce(ratePerSec * direction * -Mathf.Sign(currentValue), ForceMode.Acceleration);
-            //rb.AddForce((newValue - currentValue) * direction, ForceMode.VelocityChange);
+            rb.AddForce(ratePerSec * direction * -Mathf.Sign(speedBeforeDecelerating), ForceMode.Acceleration);
+        //rb.AddForce((newValue - currentValue) * direction, ForceMode.VelocityChange);
     }
 
     //void OnCollisionStay(Collision collision)
@@ -243,6 +314,13 @@ public class RacerController : MonoBehaviour
             if (inputs.jump1Triggered) jump1Requested = true;
             if (inputs.jump2Triggered) jump2Requested = true;
         }
+
+        jump1Holding = inputs.jump1Holding;
+        jump2Holding = inputs.jump2Holding;
+        if(!isDrifting)
+            superJumpRequested = inputs.superJumpTriggered;
+        else
+            driftingBoostRequested = inputs.superJumpTriggered;
     }
 
     //private void OnDrawGizmos()
@@ -274,7 +352,6 @@ void SendDebugInfo()
 
         if (isGroundedText != null)
         {
-
             if (checkGrounding.isGrounded)
             {
                 isGroundedText.text = "Grounded";
@@ -284,6 +361,19 @@ void SendDebugInfo()
             {
                 isGroundedText.text = "UnGrounded";
                 isGroundedText.color = Color.yellow;
+            }
+        }
+        if (isDriftingText != null)
+        {
+            if (isDrifting)
+            {
+                isDriftingText.text = "Drifting";
+                isDriftingText.color = new Color(1, .35f, 1, 1);
+            }
+            else
+            {
+                isDriftingText.text = "Normal";
+                isDriftingText.color = Color.gray;
             }
         }
     }
